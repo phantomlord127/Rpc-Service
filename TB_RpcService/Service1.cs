@@ -15,14 +15,22 @@ namespace TB_RpcService
         public Service1()
         {
             InitializeComponent();
+            if (!EventLog.SourceExists("TB_Rpc-Service"))
+            {
+                EventLog.CreateEventSource("TB_Rpc-Service", "MyLog");
+            }
+            eventLog1.Source = "TB_Rpc-Service";
+            eventLog1.Log = "MyLog";
         }
 
         protected override void OnStart(string[] args)
         {
+            eventLog1.WriteEntry("in Onstart");
         }
 
         protected override void OnStop()
         {
+            eventLog1.WriteEntry("in Onstop");
         }
     }
 }

@@ -33,7 +33,7 @@
             // 
             // Service1
             // 
-            this.ServiceName = "Service1";
+            this.ServiceName = "TB-Rpc-Service";
             ((System.ComponentModel.ISupportInitialize)(this.eventLog1)).EndInit();
 
         }
