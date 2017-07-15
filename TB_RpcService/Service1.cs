@@ -32,13 +32,6 @@ namespace TB_RpcService
         protected override void OnStart(string[] args)
         {
             eventLog1.WriteEntry("in Onstart", EventLogEntryType.Information);
-            //ConsoleServer test = new ConsoleServer();
-
-            //AsyncCallback rpcResultHandler = new AsyncCallback(_ => Console.WriteLine(((JsonRpcStateAsync)_).Result));
-            //JsonRpcStateAsync async = new JsonRpcStateAsync(rpcResultHandler, null);
-            //async.JsonRpc = "{'method':'add','params':[1,2],'id':1}";
-            //JsonRpcProcessor.Process(Handler.DefaultSessionId(), async);
-
             _rpcServer = new RpcServer();
         }
 

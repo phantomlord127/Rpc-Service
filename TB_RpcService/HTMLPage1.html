@@ -6,7 +6,10 @@
                     var ws = new WebSocket("ws://localhost:8080/service");
                     ws.onopen = function () {
                         alert("About to send data");
-                        ws.send("Hello World"); // I WANT TO SEND THIS MESSAGE TO THE SERVER!!!!!!!!
+                        //ws.send("{'method':'add','params':[1,2],'id':1}");
+                        //ws.send("{'method':'addiere','params':[3,3],'id':1}");
+                        //alert("Close Connection");
+                        ws.close(1000, "Test");
                         alert("Message sent!");
                     };
 
@@ -16,7 +19,6 @@
                         alert("Message received = "+received_msg);
                     };
                     ws.onclose = function () {
-                        // websocket is closed.
                         alert("Connection is closed...");
                     };
                 };  

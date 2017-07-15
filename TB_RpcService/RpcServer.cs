@@ -8,12 +8,10 @@ using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using AustinHarris.JsonRpc;
-using LiteRpc.Server;
-using LightNode.Server;
 
 namespace TB_RpcService
 {
-    class RpcServer :IDisposable
+    class RpcServer : IDisposable
     {
         static Socket serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.IP);
         static private string guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -34,11 +32,10 @@ namespace TB_RpcService
         {
             foreach (Socket connection in _connections)
             {
+                connection.Shutdown(SocketShutdown.Send);
+                connection.BeginDisconnect(false, DisconnectCallback, connection);
                 connection.Close(2);
-                connection.Dispose();
             }
-            serverSocket.Close(0);
-            serverSocket.Dispose();
         }
 
         private static void AcceptCallback(IAsyncResult result)
@@ -84,19 +81,6 @@ namespace TB_RpcService
 
                     serverSocket.BeginAccept(new AsyncCallback(AcceptCallback), null);
                     client.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(ReceiveCallback), client);
-                    //var i = client.Receive(buffer); // wait for client to send a message
-
-                    //// once the message is received decode it in different formats
-                    //Console.WriteLine(Convert.ToBase64String(buffer).Substring(0, i));
-                    //Console.WriteLine((Encoding.UTF8.GetString(buffer)).Substring(0, i));
-                    //Console.WriteLine("\n\nPress enter to send data to client");
-                    //Console.Read();
-
-                    //var subA = SubArray<byte>(buffer, 0, i);
-                    //client.Send(subA);
-                    //Thread.Sleep(10000);//wait for message to be send
-
-
                 }
             }
             catch (SocketException exception)
@@ -114,8 +98,9 @@ namespace TB_RpcService
 
         private static void ReceiveCallback(IAsyncResult result)
         {
+            //ToDo: Feststellen, ob hier noch neue Verbindungen aufgebaut werden können.
             Socket client = (Socket)result.AsyncState;
-            if (client.Connected)
+            if (IsSocketConnected(client))
             {
                 int received = client.EndReceive(result);
                 if (received > 0)
@@ -123,10 +108,33 @@ namespace TB_RpcService
                     byte[] data = new byte[received]; //the data is in the byte[] format, not string!
                     Buffer.BlockCopy(_buffer, 0, data, 0, data.Length);
                     string msg = GetDecodedData(data, data.Length);
-                    Console.WriteLine($"Message: {msg}");
-                    client.Send(GetEncodeMessage("Hällo Wörld!"));
+                    Console.WriteLine($"Empfangen: {msg}");
                     client.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(ReceiveCallback), client);
+                    JsonRpcStateAsync async = new JsonRpcStateAsync(RpcResultHandler, client);
+                    async.JsonRpc = msg;
+                    JsonRpcProcessor.Process(Handler.DefaultSessionId(), async);
                 }
+            }
+            else
+            {
+                _connections.Remove(client);
+            }
+        }
+
+        private static void DisconnectCallback(IAsyncResult result)
+        {
+            Socket connection = (Socket)result.AsyncState;
+            connection.EndDisconnect(result);
+            Console.WriteLine("Verbindung wurde vom Client getrennt");
+        }
+
+        private static void RpcResultHandler(IAsyncResult result)
+        {
+            Socket client = (Socket)result.AsyncState;
+            if (client.Connected)
+            {
+                Console.WriteLine($"Gesendet: {((JsonRpcStateAsync)result).Result}");
+                client.Send(GetEncodeMessage(((JsonRpcStateAsync)result).Result));
             }
         }
 
@@ -251,15 +259,20 @@ namespace TB_RpcService
 
             return Encoding.UTF8.GetString(buffer, dataIndex, dataLength);
         }
+
+        static bool IsSocketConnected(Socket s)
+        {
+            return !((s.Poll(1000, SelectMode.SelectRead) && (s.Available == 0)) || !s.Connected);
+        }
+
     }
 
-}
-
-public class ExampleCalculatorService : JsonRpcService
-{
-    [JsonRpcMethod]
-    private double add(double l, double r)
+    public class ExampleCalculatorService : JsonRpcService
     {
-        return l + r;
+        [JsonRpcMethod]
+        private double add(double l, double r)
+        {
+            return l + r;
+        }
     }
 }
