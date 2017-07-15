@@ -107,12 +107,21 @@ namespace TB_RpcService
                 {
                     byte[] data = new byte[received]; //the data is in the byte[] format, not string!
                     Buffer.BlockCopy(_buffer, 0, data, 0, data.Length);
-                    string msg = GetDecodedData(data, data.Length);
-                    Console.WriteLine($"Empfangen: {msg}");
-                    client.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(ReceiveCallback), client);
-                    JsonRpcStateAsync async = new JsonRpcStateAsync(RpcResultHandler, client);
-                    async.JsonRpc = msg;
-                    JsonRpcProcessor.Process(Handler.DefaultSessionId(), async);
+                    if (data.Length > 12) //ToDo: Dreckiger Hack. Besser Paket korrekt auslesen!
+                    {
+                        string msg = GetDecodedData(data, data.Length);
+                        Console.WriteLine($"Empfangen: {msg}");
+                        client.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(ReceiveCallback), client);
+                        JsonRpcStateAsync async = new JsonRpcStateAsync(RpcResultHandler, client);
+                        async.JsonRpc = msg;
+                        JsonRpcProcessor.Process(Handler.DefaultSessionId(), async);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Verbindung geschlossen");
+                        client.Close();
+                        _connections.Remove(client);
+                    }
                 }
             }
             else
@@ -270,9 +279,16 @@ namespace TB_RpcService
     public class ExampleCalculatorService : JsonRpcService
     {
         [JsonRpcMethod]
-        private double add(double l, double r)
+        private double add(string token, double[] values)
         {
-            return l + r;
+            if (token == "test")
+            {
+                return values[0] + values[1];
+            }
+            else
+            {
+                return 0;
+            }
         }
     }
 }

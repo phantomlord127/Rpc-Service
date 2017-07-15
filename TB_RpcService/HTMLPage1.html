@@ -6,20 +6,47 @@
                     var ws = new WebSocket("ws://localhost:8080/service");
                     ws.onopen = function () {
                         alert("About to send data");
-                        //ws.send("{'method':'add','params':[1,2],'id':1}");
+                        var msg1 = {
+                            method: 'add',
+                            params: {
+                                token: 'test',
+                                values: [1, 2]
+                            },
+                            id: 1
+                        };
+                        var msg2 = {
+                            method: 'add',
+                            params: {
+                                token: 'test',
+                                values: [3, 4]
+                            },
+                            id: 2
+                        };
+                        var msg3 = {
+                            method: 'add',
+                            params: {
+                                token: 'test',
+                                values: [5, 6]
+                            },
+                            id: 3
+                        };
+                        var msgArray = [msg2, msg3];
+                        ws.send(JSON.stringify(msgArray));
+                        console.log(JSON.stringify(msgArray));
+                        ws.send(JSON.stringify(msg1));
+                        console.log(JSON.stringify(msg1));
                         //ws.send("{'method':'addiere','params':[3,3],'id':1}");
                         //alert("Close Connection");
-                        ws.close(1000, "Test");
-                        alert("Message sent!");
+                        //ws.close(1000, "Test");
                     };
 
                     ws.onmessage = function (evt) {
-                        alert("About to receive data");
+                        console.log("About to receive data");
                         var received_msg = evt.data;
-                        alert("Message received = "+received_msg);
+                        console.log("Message received = " + received_msg);
                     };
                     ws.onclose = function () {
-                        alert("Connection is closed...");
+                        console.log("Connection is closed...");
                     };
                 };  
             </script>
