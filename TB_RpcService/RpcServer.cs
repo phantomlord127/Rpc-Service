@@ -17,24 +17,22 @@ namespace TB_RpcService
     {
         static Socket serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.IP);
         static private string guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-        private Dictionary<string, Socket> _connections;
+        private static List<Socket> _connections = new List<Socket>();
+        private static byte[] _buffer = new byte[4096];
         static object[] services = new object[] {
            new ExampleCalculatorService()
         };
 
         public RpcServer()
         {
-            _connections = new Dictionary<string, Socket>();
             serverSocket.Bind(new IPEndPoint(IPAddress.Any, 8080));
             serverSocket.Listen(128);
-            serverSocket.BeginAccept(null, 0, OnAccept, null);
-            RpcController t = new RpcController();
-            //Console.Read();
+            serverSocket.BeginAccept(new AsyncCallback(AcceptCallback), null);
         }
 
         public void Dispose()
         {
-            foreach (Socket connection in _connections.Values)
+            foreach (Socket connection in _connections)
             {
                 connection.Close(2);
                 connection.Dispose();
@@ -43,7 +41,7 @@ namespace TB_RpcService
             serverSocket.Dispose();
         }
 
-        private static void OnAccept(IAsyncResult result)
+        private static void AcceptCallback(IAsyncResult result)
         {
             byte[] buffer = new byte[1024];
             try
@@ -54,7 +52,7 @@ namespace TB_RpcService
                 {
                     client = serverSocket.EndAccept(result);
                     var i = client.Receive(buffer);
-                    headerResponse = (Encoding.UTF8.GetString(buffer)).Substring(0, i);
+                    headerResponse = Encoding.UTF8.GetString(buffer, 0, i);
                     // write received data to the console
                     Console.WriteLine(headerResponse);
 
@@ -84,17 +82,19 @@ namespace TB_RpcService
                     // which one should I use? none of them fires the onopen method
                     client.Send(Encoding.UTF8.GetBytes(response));
 
-                    var i = client.Receive(buffer); // wait for client to send a message
+                    serverSocket.BeginAccept(new AsyncCallback(AcceptCallback), null);
+                    client.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(ReceiveCallback), client);
+                    //var i = client.Receive(buffer); // wait for client to send a message
 
-                    // once the message is received decode it in different formats
-                    Console.WriteLine(Convert.ToBase64String(buffer).Substring(0, i));
-                    Console.WriteLine((Encoding.UTF8.GetString(buffer)).Substring(0, i));
-                    Console.WriteLine("\n\nPress enter to send data to client");
-                    Console.Read();
+                    //// once the message is received decode it in different formats
+                    //Console.WriteLine(Convert.ToBase64String(buffer).Substring(0, i));
+                    //Console.WriteLine((Encoding.UTF8.GetString(buffer)).Substring(0, i));
+                    //Console.WriteLine("\n\nPress enter to send data to client");
+                    //Console.Read();
 
-                    var subA = SubArray<byte>(buffer, 0, i);
-                    client.Send(subA);
-                    Thread.Sleep(10000);//wait for message to be send
+                    //var subA = SubArray<byte>(buffer, 0, i);
+                    //client.Send(subA);
+                    //Thread.Sleep(10000);//wait for message to be send
 
 
                 }
@@ -107,7 +107,28 @@ namespace TB_RpcService
             {
                 if (serverSocket != null && serverSocket.IsBound)
                 {
-                    serverSocket.BeginAccept(null, 0, OnAccept, null);
+                    serverSocket.BeginAccept(null, 0, AcceptCallback, null);
+                }
+            }
+        }
+
+        private static void ReceiveCallback(IAsyncResult result)
+        {
+            Socket client = (Socket)result.AsyncState;
+            if (client.Connected)
+            {
+                int received = client.EndReceive(result);
+                if (received > 0)
+                {
+                    byte[] data = new byte[received]; //the data is in the byte[] format, not string!
+                    Buffer.BlockCopy(_buffer, 0, data, 0, data.Length);
+                    //Console.WriteLine(Encoding.UTF8.GetString(data));
+                    foreach (EncodingInfo encoding in Encoding.GetEncodings())
+                    {
+                        Console.WriteLine($"{encoding.Name} ergibt: {encoding.GetEncoding().GetString(data)}");
+                    }
+                    client.Send(data);
+                    client.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(ReceiveCallback), client);
                 }
             }
         }
