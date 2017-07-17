@@ -7,12 +7,12 @@ using System.Threading.Tasks;
 
 namespace TB_RpcService
 {
-    static class Program
+    static public class Program
     {
         /// <summary>
         /// Der Haupteinstiegspunkt für die Anwendung.
         /// </summary>
-        static void Main(string[] args)
+        static public void Main(string[] args)
         {
             if (Environment.UserInteractive)
             {

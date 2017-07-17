@@ -30,7 +30,21 @@
                             },
                             id: 3
                         };
-                        var msgArray = [msg2, msg3];
+                        var msgArray = [{
+                            method: 'add',
+                            params: {
+                                token: 'test',
+                                values: [3, 4]
+                            },
+                            id: 2
+                        }, {
+                            method: 'add',
+                            params: {
+                                token: 'test',
+                                values: [5, 6]
+                            },
+                            id: 3
+                        }];
                         ws.send(JSON.stringify(msgArray));
                         console.log(JSON.stringify(msgArray));
                         ws.send(JSON.stringify(msg1));

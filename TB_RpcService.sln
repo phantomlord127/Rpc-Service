@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TB_RpcService", "TB_RpcServ
 EndProject
 Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "TB_Rpc-ServiceSetup", "TB_Rpc-ServiceSetup\TB_Rpc-ServiceSetup.vdproj", "{A482FF8C-0D95-49E7-8F7D-E448DA1A3334}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TestRpcServer", "UnitTest_TB_Rpc-Service\TestRpcServer.csproj", "{6D21FD81-D8D6-420C-B52A-1EFC03B9307C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -19,6 +21,10 @@ Global
 		{0BFD57C6-7337-4D25-9F4A-65258C4586C9}.Release|Any CPU.Build.0 = Release|Any CPU
 		{A482FF8C-0D95-49E7-8F7D-E448DA1A3334}.Debug|Any CPU.ActiveCfg = Debug
 		{A482FF8C-0D95-49E7-8F7D-E448DA1A3334}.Release|Any CPU.ActiveCfg = Release
+		{6D21FD81-D8D6-420C-B52A-1EFC03B9307C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6D21FD81-D8D6-420C-B52A-1EFC03B9307C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6D21FD81-D8D6-420C-B52A-1EFC03B9307C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6D21FD81-D8D6-420C-B52A-1EFC03B9307C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

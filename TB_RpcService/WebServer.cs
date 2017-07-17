@@ -1,17 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Net.Sockets;
 using System.Net;
+using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Security.Cryptography;
-using System.Threading;
+using System.Text;
 using System.Threading.Tasks;
 using AustinHarris.JsonRpc;
 
 namespace TB_RpcService
 {
-    class RpcServer : IDisposable
+    public class WebServer
     {
         static Socket serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.IP);
         static private string guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -21,14 +21,14 @@ namespace TB_RpcService
            new ExampleCalculatorService()
         };
 
-        public RpcServer()
+        public void Start()
         {
             serverSocket.Bind(new IPEndPoint(IPAddress.Any, 8080));
-            serverSocket.Listen(128);
+            serverSocket.Listen(4);
             serverSocket.BeginAccept(new AsyncCallback(AcceptCallback), null);
         }
 
-        public void Dispose()
+        public void Stop()
         {
             foreach (Socket connection in _connections)
             {
@@ -38,6 +38,7 @@ namespace TB_RpcService
             }
         }
 
+        #region Socket-Handling
         private static void AcceptCallback(IAsyncResult result)
         {
             byte[] buffer = new byte[1024];
@@ -136,6 +137,7 @@ namespace TB_RpcService
             connection.EndDisconnect(result);
             Console.WriteLine("Verbindung wurde vom Client getrennt");
         }
+        #endregion
 
         private static void RpcResultHandler(IAsyncResult result)
         {
@@ -161,7 +163,7 @@ namespace TB_RpcService
             return Convert.ToBase64String(hashBytes);
         }
 
-        static SHA1 sha1 = SHA1CryptoServiceProvider.Create();
+        static SHA1 sha1 = SHA1.Create();
         private static byte[] ComputeHash(string str)
         {
             return sha1.ComputeHash(Encoding.ASCII.GetBytes(str));
@@ -169,44 +171,44 @@ namespace TB_RpcService
 
         private static byte[] GetEncodeMessage(string message)
         {
-            Byte[] response;
-            Byte[] bytesRaw = Encoding.UTF8.GetBytes(message);
-            Byte[] frame = new Byte[10];
+            byte[] response;
+            byte[] bytesRaw = Encoding.UTF8.GetBytes(message);
+            byte[] frame = new byte[10];
 
-            Int32 indexStartRawData = -1;
-            Int32 length = bytesRaw.Length;
+            int indexStartRawData = -1;
+            int length = bytesRaw.Length;
 
-            frame[0] = (Byte)129;
+            frame[0] = (byte)129;
             if (length <= 125)
             {
-                frame[1] = (Byte)length;
+                frame[1] = (byte)length;
                 indexStartRawData = 2;
             }
             else if (length >= 126 && length <= 65535)
             {
-                frame[1] = (Byte)126;
-                frame[2] = (Byte)((length >> 8) & 255);
-                frame[3] = (Byte)(length & 255);
+                frame[1] = (byte)126;
+                frame[2] = (byte)((length >> 8) & 255);
+                frame[3] = (byte)(length & 255);
                 indexStartRawData = 4;
             }
             else
             {
-                frame[1] = (Byte)127;
-                frame[2] = (Byte)((length >> 56) & 255);
-                frame[3] = (Byte)((length >> 48) & 255);
-                frame[4] = (Byte)((length >> 40) & 255);
-                frame[5] = (Byte)((length >> 32) & 255);
-                frame[6] = (Byte)((length >> 24) & 255);
-                frame[7] = (Byte)((length >> 16) & 255);
-                frame[8] = (Byte)((length >> 8) & 255);
-                frame[9] = (Byte)(length & 255);
+                frame[1] = (byte)127;
+                frame[2] = (byte)((length >> 56) & 255);
+                frame[3] = (byte)((length >> 48) & 255);
+                frame[4] = (byte)((length >> 40) & 255);
+                frame[5] = (byte)((length >> 32) & 255);
+                frame[6] = (byte)((length >> 24) & 255);
+                frame[7] = (byte)((length >> 16) & 255);
+                frame[8] = (byte)((length >> 8) & 255);
+                frame[9] = (byte)(length & 255);
 
                 indexStartRawData = 10;
             }
 
-            response = new Byte[indexStartRawData + length];
+            response = new byte[indexStartRawData + length];
 
-            Int32 i, reponseIdx = 0;
+            int i, reponseIdx = 0;
 
             //Add the frame bytes to the reponse
             for (i = 0; i < indexStartRawData; i++)
@@ -216,11 +218,19 @@ namespace TB_RpcService
             }
 
             //Add the data bytes to the response
-            for (i = 0; i < length; i++)
+            try
             {
-                response[reponseIdx] = bytesRaw[i];
-                reponseIdx++;
+                for (i = 0; i < length; i++)
+                {
+                    response[reponseIdx] = bytesRaw[i];
+                    reponseIdx++;
+                }
             }
+            catch (Exception ex)
+            {
+                throw new Exception("Fehler beim Konvertieren", ex);
+            }
+            
 
             return response;
         }
@@ -272,23 +282,6 @@ namespace TB_RpcService
         static bool IsSocketConnected(Socket s)
         {
             return !((s.Poll(1000, SelectMode.SelectRead) && (s.Available == 0)) || !s.Connected);
-        }
-
-    }
-
-    public class ExampleCalculatorService : JsonRpcService
-    {
-        [JsonRpcMethod]
-        private double add(string token, double[] values)
-        {
-            if (token == "test")
-            {
-                return values[0] + values[1];
-            }
-            else
-            {
-                return 0;
-            }
         }
     }
 }
