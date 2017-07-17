@@ -45,7 +45,34 @@ namespace UnitTest_TB_RpcService
                     Assert.AreEqual(7, actualResult.ToObject<double>());
                 }
             }
+        }
 
+        [TestMethod]
+        public void TestManyConnections()
+        {
+            Task<string>[] tasks = new Task<string>[10];
+            for (int i = 0; i < 10; i++)
+            {
+                tasks[i] = ExcecuteClient("[{\"method\":\"add\",\"params\":{\"token\":\"test\",\"values\":[5,6]},\"id\":3},{\"method\":\"add\",\"params\":{\"token\":\"test\",\"values\":[3,4]},\"id\":4}]");
+            };
+            Task.WaitAll(tasks, 3000);
+            foreach (Task<string> task in tasks)
+            {
+                JArray actualResultJArray = JsonConvert.DeserializeObject<JArray>(task.Result);
+                foreach (JObject obj in actualResultJArray)
+                {
+                    JToken actualResult = obj.GetValue("result");
+                    JToken id = obj.GetValue("id");
+                    if (double.Parse(id.ToString()) == 3)
+                    {
+                        Assert.AreEqual(11, actualResult.ToObject<double>());
+                    }
+                    else
+                    {
+                        Assert.AreEqual(7, actualResult.ToObject<double>());
+                    }
+                }
+            }
         }
 
         [ClassInitialize]
@@ -66,8 +93,6 @@ namespace UnitTest_TB_RpcService
             string returnMessage = string.Empty;
             try
             {
-                //WebServer ws = new WebServer();
-                //ws.Start();
                 CancellationTokenSource ctSource = new CancellationTokenSource();
                 ClientWebSocket client = new ClientWebSocket();
                 byte[] byteBuffer = new byte[1024];

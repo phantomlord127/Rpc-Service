@@ -59,17 +59,17 @@ namespace TB_RpcService
                 {
                     /* Handshaking and managing ClientSocket */
 
-                    var key = headerResponse.Replace("ey:", "`")
+                    string key = headerResponse.Replace("ey:", "`")
                               .Split('`')[1]                     // dGhlIHNhbXBsZSBub25jZQ== \r\n .......
                               .Replace("\r", "").Split('\n')[0]  // dGhlIHNhbXBsZSBub25jZQ==
                               .Trim();
 
                     // key should now equal dGhlIHNhbXBsZSBub25jZQ==
-                    var test1 = AcceptKey(ref key);
+                    string test1 = AcceptKey(ref key);
 
-                    var newLine = "\r\n";
+                    string newLine = "\r\n";
 
-                    var response = "HTTP/1.1 101 Switching Protocols" + newLine
+                    string response = "HTTP/1.1 101 Switching Protocols" + newLine
                          + "Upgrade: websocket" + newLine
                          + "Connection: Upgrade" + newLine
                          + "Sec-WebSocket-Accept: " + test1 + newLine + newLine
@@ -78,10 +78,15 @@ namespace TB_RpcService
                          ;
 
                     // which one should I use? none of them fires the onopen method
-                    client.Send(Encoding.UTF8.GetBytes(response));
-
-                    serverSocket.BeginAccept(new AsyncCallback(AcceptCallback), null);
-                    client.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(ReceiveCallback), client);
+                    if (string.IsNullOrEmpty(test1))
+                    {
+                        client.Close();
+                    }
+                    else
+                    {
+                        client.Send(Encoding.UTF8.GetBytes(response));
+                        client.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(ReceiveCallback), client);
+                    }
                 }
             }
             catch (SocketException exception)
@@ -158,9 +163,19 @@ namespace TB_RpcService
 
         private static string AcceptKey(ref string key)
         {
-            string longKey = key + guid;
-            byte[] hashBytes = ComputeHash(longKey);
-            return Convert.ToBase64String(hashBytes);
+            string accceptKey = string.Empty;
+            try
+            {
+                string longKey = key + guid;
+                byte[] hashBytes = ComputeHash(longKey);
+                accceptKey = Convert.ToBase64String(hashBytes);
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+             return accceptKey;
+            
         }
 
         static SHA1 sha1 = SHA1.Create();
