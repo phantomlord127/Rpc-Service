@@ -215,7 +215,7 @@ namespace TB_RpcService
             }
             catch (Exception ex)
             {
-                throw ex;
+                throw new Exception("Handschake nicht erfolgreich", ex);
             }
             return accceptKey;
 

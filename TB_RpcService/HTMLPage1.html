@@ -3,7 +3,7 @@
         <head>
             <script type="text/javascript">
                 function connect() {
-                    var ws = new WebSocket("ws://localhost:8080/service");
+                    var ws = new WebSocket("ws://localhost:8080/httpSocket");
                     ws.onopen = function () {
                         alert("About to send data");
                         var msg1 = {
