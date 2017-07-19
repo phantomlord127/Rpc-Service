@@ -84,6 +84,7 @@ namespace UnitTest_TB_RpcService
         {
             _ws = new WebServer();
             _ws.Start();
+            Thread.Sleep(1000);
         }
 
         [ClassCleanup]
