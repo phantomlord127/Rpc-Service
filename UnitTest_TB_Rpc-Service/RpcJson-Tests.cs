@@ -19,60 +19,64 @@ namespace UnitTest_TB_RpcService
         [TestMethod]
         public void TestSignleAdd()
         {
-            Task<string> result = ExcecuteClient("{\"method\":\"add\",\"params\":{\"token\":\"test\",\"values\":[5,6]},\"id\":3}");
-            result.Wait();
-            JObject actualResultJObject = JsonConvert.DeserializeObject<JObject>(result.Result);
-            JToken actualResult = actualResultJObject.GetValue("result");
-            Assert.AreEqual(11, actualResult.ToObject<double>());
+            Task.Factory.StartNew(() => ExcecuteClient("{\"method\":\"add\",\"params\":{\"token\":\"test\",\"values\":[5,6]},\"id\":3}")
+            .ContinueWith((t) => AssertResult(t)));
         }
 
         [TestMethod]
         public void TestBatchAdd()
         {
-            Task<string> result = ExcecuteClient("[{\"method\":\"add\",\"params\":{\"token\":\"test\",\"values\":[5,6]},\"id\":3},{\"method\":\"add\",\"params\":{\"token\":\"test\",\"values\":[3,4]},\"id\":4}]");
-            result.Wait();
-            JArray actualResultJArray = JsonConvert.DeserializeObject<JArray>(result.Result);
-            foreach (JObject obj in actualResultJArray)
-            {
-                JToken actualResult = obj.GetValue("result");
-                JToken id = obj.GetValue("id");
-                if (double.Parse(id.ToString()) == 3)
-                {
-                    Assert.AreEqual(11, actualResult.ToObject<double>());
-                }
-                else
-                {
-                    Assert.AreEqual(7, actualResult.ToObject<double>());
-                }
-            }
+            Task.Factory.StartNew(() => ExcecuteClient("[{\"method\":\"add\",\"params\":{\"token\":\"test\",\"values\":[5,6]},\"id\":3},{\"method\":\"add\",\"params\":{\"token\":\"test\",\"values\":[3,4]},\"id\":4}]")
+            .ContinueWith((t) => AssertResult(t)));
         }
 
         [TestMethod]
         public void TestManyConnections()
         {
-            Task<string>[] tasks = new Task<string>[10];
-            for (int i = 0; i < 10; i++)
+            Task<string>[] tasks = new Task<string>[1000];
+            for (int i = 0; i < 1000; i++)
             {
                 tasks[i] = ExcecuteClient("[{\"method\":\"add\",\"params\":{\"token\":\"test\",\"values\":[5,6]},\"id\":3},{\"method\":\"add\",\"params\":{\"token\":\"test\",\"values\":[3,4]},\"id\":4}]");
+                tasks[i].ContinueWith((t) => AssertResult(t));
             };
-            Task.WaitAll(tasks, 3000);
+            Console.WriteLine("Wait all");
+            Task.WaitAll(tasks);
             foreach (Task<string> task in tasks)
             {
-                JArray actualResultJArray = JsonConvert.DeserializeObject<JArray>(task.Result);
-                foreach (JObject obj in actualResultJArray)
+                task.Dispose();
+            }
+        }
+
+        private static void AssertResult(Task<string> result)
+        {
+            Console.WriteLine($"AssertResult for: {Thread.CurrentThread.Name} and Taks: {result.Id} at {DateTime.Now.ToLongTimeString()}");
+            var actualResultJArray = JsonConvert.DeserializeObject(result.Result);
+            if (actualResultJArray.GetType() == typeof(JArray))
+            {
+                foreach (JObject obj in (JArray)actualResultJArray)
                 {
-                    JToken actualResult = obj.GetValue("result");
-                    JToken id = obj.GetValue("id");
-                    if (double.Parse(id.ToString()) == 3)
-                    {
-                        Assert.AreEqual(11, actualResult.ToObject<double>());
-                    }
-                    else
-                    {
-                        Assert.AreEqual(7, actualResult.ToObject<double>());
-                    }
+                    AsserResultObject(obj);
                 }
             }
+            else
+            {
+                AsserResultObject((JObject)actualResultJArray);
+            }
+        }
+
+        private static void AsserResultObject(JObject obj)
+        {
+            JToken actualResult = obj.GetValue("result");
+            JToken id = obj.GetValue("id");
+            if (double.Parse(id.ToString()) == 3)
+            {
+                Assert.AreEqual(11, actualResult.ToObject<double>());
+            }
+            else
+            {
+                Assert.AreEqual(7, actualResult.ToObject<double>());
+            }
+
         }
 
         [ClassInitialize]
@@ -91,24 +95,33 @@ namespace UnitTest_TB_RpcService
         private async Task<string> ExcecuteClient(string msg)
         {
             string returnMessage = string.Empty;
+            ClientWebSocket client = new ClientWebSocket();
+            CancellationTokenSource ctSource = new CancellationTokenSource();
             try
             {
-                CancellationTokenSource ctSource = new CancellationTokenSource();
-                ClientWebSocket client = new ClientWebSocket();
-                byte[] byteBuffer = new byte[1024];
+                byte[] byteBuffer = new byte[256];
                 ArraySegment<byte> buffer = new ArraySegment<byte>(byteBuffer);
-                await client.ConnectAsync(new Uri("ws://localhost:8080/service"), ctSource.Token);
-                Task<WebSocketReceiveResult> result = client.ReceiveAsync(buffer, ctSource.Token);
+                await client.ConnectAsync(new Uri("ws://localhost:8080/httpSocket"), ctSource.Token);
                 await client.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes(msg)),
                     WebSocketMessageType.Text, true, ctSource.Token);
-                result.Wait(ctSource.Token);
+                WebSocketReceiveResult result = await client.ReceiveAsync(buffer, ctSource.Token);
+                returnMessage = Encoding.UTF8.GetString(byteBuffer, 0, result.Count);
                 await client.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "test", ctSource.Token);
-                client.Dispose();
-                returnMessage = Encoding.UTF8.GetString(buffer.ToArray());
+                await client.ReceiveAsync(buffer, ctSource.Token);
+                ctSource.Cancel();
             }
             catch (Exception ex)
             {
                 returnMessage = ex.ToString();
+            }
+            finally
+            {
+                if(!ctSource.IsCancellationRequested)
+                {
+                    ctSource.Cancel();
+                }
+                ctSource.Dispose();
+                client.Dispose();
             }
             return returnMessage;
         }

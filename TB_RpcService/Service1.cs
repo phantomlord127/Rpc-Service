@@ -33,49 +33,10 @@ namespace TB_RpcService
             eventLog1.WriteEntry("in Onstart", EventLogEntryType.Information);
             _ws = new WebServer();
             _ws.Start();
-            //// Start up the HttpListener on the passes Uri.  
-            //HttpListener listener = new HttpListener();
-            //listener.Prefixes.Add("http://0.0.0.0:8080/httpSocket/");
-            //listener.Start();
-            //Console.WriteLine("Listening...");
-            //// Accept the HttpListenerContext 
-            //HttpListenerContext listenerContext = await listener.GetContextAsync();
-
-            //// Check if this is for a websocket request 
-            //if (listenerContext.Request.IsWebSocketRequest)
-            //{
-            //    ProcessRequest(listenerContext);
-            //}
-            //else
-            //{
-            //    // Since we are expecting WebSocket requests and this is not - send HTTP 400 
-            //    listenerContext.Response.StatusCode = 400;
-            //    listenerContext.Response.Close();
-            //}
+            
         }
 
-        //private async void ProcessRequest(HttpListenerContext listenerContext)
-        //{
-        //    WebSocketContext webSocketContext = null;
-
-        //    try
-        //    {
-        //        // Accept the WebSocket request 
-        //        webSocketContext = await listenerContext.AcceptWebSocketAsync(subProtocol: null);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        // If any error occurs then send HTTP Status 500 
-        //        listenerContext.Response.StatusCode = 500;
-        //        listenerContext.Response.Close();
-        //        Console.WriteLine("Exception : {0}", ex.Message);
-        //        return;
-        //    }
-
-        //    // Accept the WebSocket connect.  
-        //    WebSocket webSocket = webSocketContext.WebSocket;
-        //    await webSocket.SendAsync(new ArraySegment<byte>(Encoding.UTF8.GetBytes("hello Wörld")), WebSocketMessageType.Text, true, null);
-        //}
+      
 
         protected override void OnStop()
         {

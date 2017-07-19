@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using AustinHarris.JsonRpc;
 
@@ -15,30 +16,113 @@ namespace TB_RpcService
     {
         static Socket serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.IP);
         static private string guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+        private static HttpListener _listener;
         private static List<Socket> _connections = new List<Socket>();
         private static byte[] _buffer = new byte[4096];
+        private static CancellationTokenSource _ctSource = new CancellationTokenSource();
+        private static CancellationToken _token = _ctSource.Token;
         static object[] services = new object[] {
            new ExampleCalculatorService()
         };
 
         public void Start()
         {
-            serverSocket.Bind(new IPEndPoint(IPAddress.Any, 8080));
-            serverSocket.Listen(4);
-            serverSocket.BeginAccept(new AsyncCallback(AcceptCallback), null);
+            // Start up the HttpListener on the passes Uri.  
+            _listener = new HttpListener();
+            _listener.Prefixes.Add("http://127.0.0.1:8080/httpSocket/");
+            _listener.Start();
+            Console.WriteLine("Listening...");
+            _listener.BeginGetContext(ContextCallback, _listener);
+        }
+
+        private void ContextCallback(IAsyncResult result)
+        {
+            // Accept the HttpListenerContext
+            HttpListener listener = (HttpListener)result.AsyncState;
+            if (! listener.IsListening)
+            {
+                //throw new Exception("Listener disposed");
+                Console.WriteLine("Listening is stopped.");
+                return;
+            }
+            HttpListenerContext listenerContext = listener.EndGetContext(result);
+            listener.BeginGetContext(ContextCallback, listener);
+            // Check if this is for a websocket request 
+            if (listenerContext.Request.IsWebSocketRequest)
+            {
+                Console.WriteLine($"Connection Request by: {listenerContext.Request.RemoteEndPoint.Address}");
+                string webSocketKey = listenerContext.Request.Headers.Get("Sec-WebSocket-Key");
+                //listenerContext.Response.AddHeader("Sec-WebSocket-Accept", AcceptKey(ref webSocketKey));
+                ProcessRequest(listenerContext);
+            }
+            else
+            {
+                // Since we are expecting WebSocket requests and this is not - send HTTP 400 
+                listenerContext.Response.StatusCode = 400;
+                listenerContext.Response.Close();
+                Console.WriteLine("Connection Request is not a Websocket Request.");
+            }
         }
 
         public void Stop()
         {
-            foreach (Socket connection in _connections)
-            {
-                connection.Shutdown(SocketShutdown.Send);
-                connection.BeginDisconnect(false, DisconnectCallback, connection);
-                connection.Close(2);
-            }
+            _listener.Stop();
+            _listener.Close();
         }
 
-        #region Socket-Handling
+        private async void ProcessRequest(HttpListenerContext listenerContext)
+        {
+            WebSocketContext webSocketContext = null;
+            try
+            {
+                // Accept the WebSocket request 
+                webSocketContext = await listenerContext.AcceptWebSocketAsync(null, new TimeSpan(0, 0, 30));
+            }
+            catch (Exception ex)
+            {
+                // If any error occurs then send HTTP Status 500 
+                listenerContext.Response.StatusCode = 500;
+                listenerContext.Response.Close();
+                Console.WriteLine("Exception : {0}", ex.Message);
+                return;
+            }
+            // Accept the WebSocket connect.
+            byte[] buffer = new byte[256];
+            ArraySegment<byte> bufferSegment = new ArraySegment<byte>(buffer);
+            WebSocket webSocket = webSocketContext.WebSocket;
+            while (webSocket.State != WebSocketState.Closed)
+            {
+                WebSocketReceiveResult result = await webSocket.ReceiveAsync(bufferSegment, _token);
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    if (webSocket.State == WebSocketState.CloseReceived)
+                    {
+                        await Task.Delay(100); //Warum muss hier noch kurz gewartet werden? Ohne diese Zeile wird die Verbindung getrennt, trotz noch zu sendenden Text.
+                        await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Connection closed by Client.", _token);
+                        Console.WriteLine($"Connection closed by Client. Reson: {result.CloseStatusDescription}");
+                    }
+                    else if (webSocket.State == WebSocketState.Aborted)
+                    {
+                        webSocket.Abort();
+                    }
+                }
+                else if (result.MessageType == WebSocketMessageType.Text)
+                {
+                    string msg = Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    Console.WriteLine($"Server Empfangen: {msg}");
+                    JsonRpcStateAsync async = new JsonRpcStateAsync(RpcResultHandler, webSocket);
+                    async.JsonRpc = msg;
+                    JsonRpcProcessor.Process(Handler.DefaultSessionId(), async);
+                }
+                else
+                {
+                    await webSocket.SendAsync(bufferSegment, WebSocketMessageType.Binary, result.EndOfMessage, _token);
+                }
+            }
+            webSocket.Dispose();
+            Console.WriteLine("Connection closed");
+        }
+
         private static void AcceptCallback(IAsyncResult result)
         {
             byte[] buffer = new byte[1024];
@@ -85,7 +169,7 @@ namespace TB_RpcService
                     else
                     {
                         client.Send(Encoding.UTF8.GetBytes(response));
-                        client.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(ReceiveCallback), client);
+                        //client.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(ReceiveCallback), client);
                     }
                 }
             }
@@ -102,55 +186,14 @@ namespace TB_RpcService
             }
         }
 
-        private static void ReceiveCallback(IAsyncResult result)
+        private static async void RpcResultHandler(IAsyncResult result)
         {
-            //ToDo: Feststellen, ob hier noch neue Verbindungen aufgebaut werden können.
-            Socket client = (Socket)result.AsyncState;
-            if (IsSocketConnected(client))
-            {
-                int received = client.EndReceive(result);
-                if (received > 0)
-                {
-                    byte[] data = new byte[received]; //the data is in the byte[] format, not string!
-                    Buffer.BlockCopy(_buffer, 0, data, 0, data.Length);
-                    if (data.Length > 12) //ToDo: Dreckiger Hack. Besser Paket korrekt auslesen!
-                    {
-                        string msg = GetDecodedData(data, data.Length);
-                        Console.WriteLine($"Empfangen: {msg}");
-                        client.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(ReceiveCallback), client);
-                        JsonRpcStateAsync async = new JsonRpcStateAsync(RpcResultHandler, client);
-                        async.JsonRpc = msg;
-                        JsonRpcProcessor.Process(Handler.DefaultSessionId(), async);
-                    }
-                    else
-                    {
-                        Console.WriteLine("Verbindung geschlossen");
-                        client.Close();
-                        _connections.Remove(client);
-                    }
-                }
-            }
-            else
-            {
-                _connections.Remove(client);
-            }
-        }
-
-        private static void DisconnectCallback(IAsyncResult result)
-        {
-            Socket connection = (Socket)result.AsyncState;
-            connection.EndDisconnect(result);
-            Console.WriteLine("Verbindung wurde vom Client getrennt");
-        }
-        #endregion
-
-        private static void RpcResultHandler(IAsyncResult result)
-        {
-            Socket client = (Socket)result.AsyncState;
-            if (client.Connected)
+            WebSocket client = (WebSocket)result.AsyncState;
+            if (client.State == WebSocketState.Open)
             {
                 Console.WriteLine($"Gesendet: {((JsonRpcStateAsync)result).Result}");
-                client.Send(GetEncodeMessage(((JsonRpcStateAsync)result).Result));
+                byte[] msg = Encoding.UTF8.GetBytes(((JsonRpcStateAsync)result).Result);
+                await client.SendAsync(new ArraySegment<byte>(msg), WebSocketMessageType.Text, true, _token);
             }
         }
 
@@ -174,129 +217,14 @@ namespace TB_RpcService
             {
                 throw ex;
             }
-             return accceptKey;
-            
+            return accceptKey;
+
         }
 
         static SHA1 sha1 = SHA1.Create();
         private static byte[] ComputeHash(string str)
         {
             return sha1.ComputeHash(Encoding.ASCII.GetBytes(str));
-        }
-
-        private static byte[] GetEncodeMessage(string message)
-        {
-            byte[] response;
-            byte[] bytesRaw = Encoding.UTF8.GetBytes(message);
-            byte[] frame = new byte[10];
-
-            int indexStartRawData = -1;
-            int length = bytesRaw.Length;
-
-            frame[0] = (byte)129;
-            if (length <= 125)
-            {
-                frame[1] = (byte)length;
-                indexStartRawData = 2;
-            }
-            else if (length >= 126 && length <= 65535)
-            {
-                frame[1] = (byte)126;
-                frame[2] = (byte)((length >> 8) & 255);
-                frame[3] = (byte)(length & 255);
-                indexStartRawData = 4;
-            }
-            else
-            {
-                frame[1] = (byte)127;
-                frame[2] = (byte)((length >> 56) & 255);
-                frame[3] = (byte)((length >> 48) & 255);
-                frame[4] = (byte)((length >> 40) & 255);
-                frame[5] = (byte)((length >> 32) & 255);
-                frame[6] = (byte)((length >> 24) & 255);
-                frame[7] = (byte)((length >> 16) & 255);
-                frame[8] = (byte)((length >> 8) & 255);
-                frame[9] = (byte)(length & 255);
-
-                indexStartRawData = 10;
-            }
-
-            response = new byte[indexStartRawData + length];
-
-            int i, reponseIdx = 0;
-
-            //Add the frame bytes to the reponse
-            for (i = 0; i < indexStartRawData; i++)
-            {
-                response[reponseIdx] = frame[i];
-                reponseIdx++;
-            }
-
-            //Add the data bytes to the response
-            try
-            {
-                for (i = 0; i < length; i++)
-                {
-                    response[reponseIdx] = bytesRaw[i];
-                    reponseIdx++;
-                }
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("Fehler beim Konvertieren", ex);
-            }
-            
-
-            return response;
-        }
-
-        public static string GetDecodedData(byte[] buffer, int length)
-        {
-            byte b = buffer[1];
-            int dataLength = 0;
-            int totalLength = 0;
-            int keyIndex = 0;
-
-            if (b - 128 <= 125)
-            {
-                dataLength = b - 128;
-                keyIndex = 2;
-                totalLength = dataLength + 6;
-            }
-
-            if (b - 128 == 126)
-            {
-                dataLength = BitConverter.ToInt16(new byte[] { buffer[3], buffer[2] }, 0);
-                keyIndex = 4;
-                totalLength = dataLength + 8;
-            }
-
-            if (b - 128 == 127)
-            {
-                dataLength = (int)BitConverter.ToInt64(new byte[] { buffer[9], buffer[8], buffer[7], buffer[6], buffer[5], buffer[4], buffer[3], buffer[2] }, 0);
-                keyIndex = 10;
-                totalLength = dataLength + 14;
-            }
-
-            if (totalLength > length)
-                throw new Exception("The buffer length is small than the data length");
-
-            byte[] key = new byte[] { buffer[keyIndex], buffer[keyIndex + 1], buffer[keyIndex + 2], buffer[keyIndex + 3] };
-
-            int dataIndex = keyIndex + 4;
-            int count = 0;
-            for (int i = dataIndex; i < totalLength; i++)
-            {
-                buffer[i] = (byte)(buffer[i] ^ key[count % 4]);
-                count++;
-            }
-
-            return Encoding.UTF8.GetString(buffer, dataIndex, dataLength);
-        }
-
-        static bool IsSocketConnected(Socket s)
-        {
-            return !((s.Poll(1000, SelectMode.SelectRead) && (s.Available == 0)) || !s.Connected);
         }
     }
 }
