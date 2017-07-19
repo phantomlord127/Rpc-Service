@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
@@ -9,6 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using AustinHarris.JsonRpc;
+using Newtonsoft.Json.Linq;
 
 namespace TB_RpcService
 {
@@ -27,12 +29,32 @@ namespace TB_RpcService
 
         public void Start()
         {
+            //Config Austin Harris Rpc
+            Config.SetErrorHandler(OnJsonRpcException);
+            Config.SetPreProcessHandler(new PreProcessHandler(PreProcess));
             // Start up the HttpListener on the passes Uri.  
             _listener = new HttpListener();
             _listener.Prefixes.Add("http://127.0.0.1:8080/httpSocket/");
             _listener.Start();
             Console.WriteLine("Listening...");
             _listener.BeginGetContext(ContextCallback, _listener);
+
+        }
+
+        private JsonRpcException PreProcess(JsonRequest request, object context)
+        {
+            JObject j = request.Params as JObject;
+            if (j == null || ! j.First.HasValues || j.First.First.ToString() != "test")
+            {
+                throw new JsonRpcException(-32602, "Invalid Token", null);
+            }
+            return null;
+        }
+
+        private JsonRpcException OnJsonRpcException(JsonRequest request, JsonRpcException ex)
+        {
+            ex.data = null;
+            return ex;
         }
 
         private void ContextCallback(IAsyncResult result)

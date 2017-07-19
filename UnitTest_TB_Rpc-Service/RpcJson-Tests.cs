@@ -19,10 +19,10 @@ namespace UnitTest_TB_RpcService
         [TestMethod]
         public void TestSignleAdd()
         {
-            Task.Factory.StartNew(() => ExcecuteClient("{\"method\":\"add\",\"params\":{\"token\":\"test\",\"values\":[5,6]},\"id\":3}")
+            Task.Factory.StartNew(() => ExcecuteClient("{\"method\":\"add\",\"params\":{\"token\":\"2\",\"values\":[5,6]},\"id\":3}")
             .ContinueWith((t) => AssertResult(t)));
         }
-
+        
         [TestMethod]
         public void TestBatchAdd()
         {

@@ -11,23 +11,7 @@ namespace TB_RpcService
         [JsonRpcMethod]
         private double add(string token, double[] values)
         {
-            if (isTokenValid("test"))
-            {
-                return values[0] + values[1];
-            }
-            else
-            {
-                return 0;
-            }
-        }
-
-        private bool isTokenValid(string token)
-        {
-            if (token == "test")
-            {
-                return true;
-            }
-            return false;
+            return values[0] + values[1];
         }
     }
 }
