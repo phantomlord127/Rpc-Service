@@ -30,16 +30,16 @@
                             id: 3
                         }];
                         var msgShutdown = {
-                            method: 'shutDownPc',
+                            method: 'updateComputer',
                             params: {
                                 token: 'test'
                             },
                             id: 4
                         };
-                        ws.send(JSON.stringify(msgArray));
-                        console.log(JSON.stringify(msgArray));
-                        ws.send(JSON.stringify(msg1));
-                        console.log(JSON.stringify(msg1));
+                        //ws.send(JSON.stringify(msgArray));
+                        //console.log(JSON.stringify(msgArray));
+                        //ws.send(JSON.stringify(msg1));
+                        //console.log(JSON.stringify(msg1));
                         ws.send(JSON.stringify(msgShutdown));
                         console.log(JSON.stringify(msgShutdown));
                         //ws.send("{'method':'addiere','params':[3,3],'id':1}");

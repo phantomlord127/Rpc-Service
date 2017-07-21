@@ -47,6 +47,13 @@ namespace UnitTest_TB_RpcService
             }
         }
 
+        [TestMethod]
+        public void TestWUApi()
+        {
+            Task.Factory.StartNew(() => ExcecuteClient("{\"method\":\"updateComputer\",\"params\":{\"token\":\"test\"},\"id\":1}")
+            .ContinueWith((t) => AssertResult(t)));
+        }
+
         private static void AssertResult(Task<string> result)
         {
             Console.WriteLine($"AssertResult for: {Thread.CurrentThread.Name} and Taks: {result.Id} at {DateTime.Now.ToLongTimeString()}");
@@ -68,7 +75,11 @@ namespace UnitTest_TB_RpcService
         {
             JToken actualResult = obj.GetValue("result");
             JToken id = obj.GetValue("id");
-            if (double.Parse(id.ToString()) == 3)
+            if (double.Parse(id.ToString()) == 1)
+            {
+                Assert.AreEqual(string.Empty, actualResult.ToObject<string>());
+            }
+            else if (double.Parse(id.ToString()) == 3)
             {
                 Assert.AreEqual(11, actualResult.ToObject<double>());
             }

@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using AustinHarris.JsonRpc;
+using TB_RpcService.RpcHelpers;
 
 namespace TB_RpcService
 {
@@ -23,6 +24,14 @@ namespace TB_RpcService
             psi.UseShellExecute = false;
             Process.Start(psi);
             return true;
+        }
+
+        [JsonRpcMethod]
+        private string updateComputer(string token)
+        {
+            WUApiHelper helper = new WUApiHelper();
+            helper.StartWU();
+            return "Update gestartet";
         }
     }
 }

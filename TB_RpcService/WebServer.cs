@@ -16,10 +16,7 @@ namespace TB_RpcService
 {
     public class WebServer
     {
-        static Socket serverSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.IP);
-        static private string guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
         private static HttpListener _listener;
-        private static List<Socket> _connections = new List<Socket>();
         private static byte[] _buffer = new byte[4096];
         private static CancellationTokenSource _ctSource = new CancellationTokenSource();
         private static CancellationToken _token = _ctSource.Token;
@@ -145,69 +142,6 @@ namespace TB_RpcService
             Console.WriteLine("Connection closed");
         }
 
-        private static void AcceptCallback(IAsyncResult result)
-        {
-            byte[] buffer = new byte[1024];
-            try
-            {
-                Socket client = null;
-                string headerResponse = "";
-                if (serverSocket != null && serverSocket.IsBound)
-                {
-                    client = serverSocket.EndAccept(result);
-                    var i = client.Receive(buffer);
-                    headerResponse = Encoding.UTF8.GetString(buffer, 0, i);
-                    // write received data to the console
-                    Console.WriteLine(headerResponse);
-
-                }
-                if (client != null)
-                {
-                    /* Handshaking and managing ClientSocket */
-
-                    string key = headerResponse.Replace("ey:", "`")
-                              .Split('`')[1]                     // dGhlIHNhbXBsZSBub25jZQ== \r\n .......
-                              .Replace("\r", "").Split('\n')[0]  // dGhlIHNhbXBsZSBub25jZQ==
-                              .Trim();
-
-                    // key should now equal dGhlIHNhbXBsZSBub25jZQ==
-                    string test1 = AcceptKey(ref key);
-
-                    string newLine = "\r\n";
-
-                    string response = "HTTP/1.1 101 Switching Protocols" + newLine
-                         + "Upgrade: websocket" + newLine
-                         + "Connection: Upgrade" + newLine
-                         + "Sec-WebSocket-Accept: " + test1 + newLine + newLine
-                         //+ "Sec-WebSocket-Protocol: chat, superchat" + newLine
-                         //+ "Sec-WebSocket-Version: 13" + newLine
-                         ;
-
-                    // which one should I use? none of them fires the onopen method
-                    if (string.IsNullOrEmpty(test1))
-                    {
-                        client.Close();
-                    }
-                    else
-                    {
-                        client.Send(Encoding.UTF8.GetBytes(response));
-                        //client.BeginReceive(_buffer, 0, _buffer.Length, SocketFlags.None, new AsyncCallback(ReceiveCallback), client);
-                    }
-                }
-            }
-            catch (SocketException exception)
-            {
-                throw exception;
-            }
-            finally
-            {
-                if (serverSocket != null && serverSocket.IsBound)
-                {
-                    serverSocket.BeginAccept(null, 0, AcceptCallback, null);
-                }
-            }
-        }
-
         private static async void RpcResultHandler(IAsyncResult result)
         {
             WebSocket client = (WebSocket)result.AsyncState;
@@ -217,36 +151,6 @@ namespace TB_RpcService
                 byte[] msg = Encoding.UTF8.GetBytes(((JsonRpcStateAsync)result).Result);
                 await client.SendAsync(new ArraySegment<byte>(msg), WebSocketMessageType.Text, true, _token);
             }
-        }
-
-        public static T[] SubArray<T>(T[] data, int index, int length)
-        {
-            T[] result = new T[length];
-            Array.Copy(data, index, result, 0, length);
-            return result;
-        }
-
-        private static string AcceptKey(ref string key)
-        {
-            string accceptKey = string.Empty;
-            try
-            {
-                string longKey = key + guid;
-                byte[] hashBytes = ComputeHash(longKey);
-                accceptKey = Convert.ToBase64String(hashBytes);
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("Handschake nicht erfolgreich", ex);
-            }
-            return accceptKey;
-
-        }
-
-        static SHA1 sha1 = SHA1.Create();
-        private static byte[] ComputeHash(string str)
-        {
-            return sha1.ComputeHash(Encoding.ASCII.GetBytes(str));
         }
     }
 }
