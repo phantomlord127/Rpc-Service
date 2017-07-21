@@ -47,12 +47,12 @@ namespace UnitTest_TB_RpcService
             }
         }
 
-        [TestMethod]
-        public void TestWUApi()
-        {
-            Task.Factory.StartNew(() => ExcecuteClient("{\"method\":\"updateComputer\",\"params\":{\"token\":\"test\"},\"id\":1}")
-            .ContinueWith((t) => AssertResult(t)));
-        }
+        //[TestMethod]
+        //public void TestWUApi()
+        //{
+        //    Task.Factory.StartNew(() => ExcecuteClient("{\"method\":\"updateComputer\",\"params\":{\"token\":\"test\"},\"id\":1}")
+        //    .ContinueWith((t) => AssertResult(t)));
+        //}
 
         private static void AssertResult(Task<string> result)
         {

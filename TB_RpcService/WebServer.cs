@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using AustinHarris.JsonRpc;
+using log4net;
 using Newtonsoft.Json.Linq;
 
 namespace TB_RpcService
@@ -20,12 +21,15 @@ namespace TB_RpcService
         private static byte[] _buffer = new byte[4096];
         private static CancellationTokenSource _ctSource = new CancellationTokenSource();
         private static CancellationToken _token = _ctSource.Token;
+        private static ILog _log;
         static object[] services = new object[] {
            new ExampleCalculatorService()
         };
 
         public void Start()
         {
+            log4net.Config.XmlConfigurator.Configure();
+            _log = LogManager.GetLogger(typeof(WebServer));
             //Config Austin Harris Rpc
             Config.SetErrorHandler(OnJsonRpcException);
             Config.SetPreProcessHandler(new PreProcessHandler(PreProcess));
@@ -33,9 +37,8 @@ namespace TB_RpcService
             _listener = new HttpListener();
             _listener.Prefixes.Add("http://127.0.0.1:8080/httpSocket/");
             _listener.Start();
-            Console.WriteLine("Listening...");
             _listener.BeginGetContext(ContextCallback, _listener);
-
+            _log.InfoFormat("Listener is startet for the following Prefixes:{0}", string.Join(",", _listener.Prefixes));
         }
 
         private JsonRpcException PreProcess(JsonRequest request, object context)
@@ -43,13 +46,16 @@ namespace TB_RpcService
             JObject j = request.Params as JObject;
             if (j == null || ! j.First.HasValues || j.First.First.ToString() != "test")
             {
+                _log.WarnFormat("The token of the request is invalid. Request: {0} . Context: {1}", request, context);
                 throw new JsonRpcException(-32602, "Invalid Token", null);
             }
+            _log.DebugFormat("Accept the following request: {0}", request);
             return null;
         }
 
         private JsonRpcException OnJsonRpcException(JsonRequest request, JsonRpcException ex)
         {
+            _log.ErrorFormat("Exception in JsonRpc. Request: {0} . Exception: {1}", request, ex);
             ex.data = null;
             return ex;
         }
@@ -60,8 +66,7 @@ namespace TB_RpcService
             HttpListener listener = (HttpListener)result.AsyncState;
             if (! listener.IsListening)
             {
-                //throw new Exception("Listener disposed");
-                Console.WriteLine("Listening is stopped.");
+                _log.Error("Listiner is not listinig");
                 return;
             }
             HttpListenerContext listenerContext = listener.EndGetContext(result);
@@ -69,8 +74,8 @@ namespace TB_RpcService
             // Check if this is for a websocket request 
             if (listenerContext.Request.IsWebSocketRequest)
             {
-                Console.WriteLine($"Connection Request by: {listenerContext.Request.RemoteEndPoint.Address}");
-                string webSocketKey = listenerContext.Request.Headers.Get("Sec-WebSocket-Key");
+                _log.InfoFormat("Connection Request by {0}:{1}", listenerContext.Request.RemoteEndPoint.Address, listenerContext.Request.RemoteEndPoint.Port);
+                //string webSocketKey = listenerContext.Request.Headers.Get("Sec-WebSocket-Key");
                 //listenerContext.Response.AddHeader("Sec-WebSocket-Accept", AcceptKey(ref webSocketKey));
                 ProcessRequest(listenerContext);
             }
@@ -79,12 +84,13 @@ namespace TB_RpcService
                 // Since we are expecting WebSocket requests and this is not - send HTTP 400 
                 listenerContext.Response.StatusCode = 400;
                 listenerContext.Response.Close();
-                Console.WriteLine("Connection Request is not a Websocket Request.");
+                _log.ErrorFormat("Connection Request is not a Websocket Request. {0}", listenerContext.Request);
             }
         }
 
         public void Stop()
         {
+            _log.Info("Listener is shutting down.");
             _listener.Stop();
             _listener.Close();
         }
@@ -96,13 +102,14 @@ namespace TB_RpcService
             {
                 // Accept the WebSocket request 
                 webSocketContext = await listenerContext.AcceptWebSocketAsync(null, new TimeSpan(0, 0, 30));
+                _log.DebugFormat("New webSocketConnection: {0}", webSocketContext);
             }
             catch (Exception ex)
             {
                 // If any error occurs then send HTTP Status 500 
                 listenerContext.Response.StatusCode = 500;
                 listenerContext.Response.Close();
-                Console.WriteLine("Exception : {0}", ex.Message);
+                _log.ErrorFormat("Error AcceptWebSocket. ListenerContext: {0} . Exception: {1}", listenerContext, ex);
                 return;
             }
             // Accept the WebSocket connect.
@@ -111,35 +118,37 @@ namespace TB_RpcService
             WebSocket webSocket = webSocketContext.WebSocket;
             while (webSocket.State != WebSocketState.Closed)
             {
-                WebSocketReceiveResult result = await webSocket.ReceiveAsync(bufferSegment, _token);
-                if (result.MessageType == WebSocketMessageType.Close)
+                WebSocketReceiveResult request = await webSocket.ReceiveAsync(bufferSegment, _token);
+                if (request.MessageType == WebSocketMessageType.Close)
                 {
                     if (webSocket.State == WebSocketState.CloseReceived)
                     {
                         await Task.Delay(100); //Warum muss hier noch kurz gewartet werden? Ohne diese Zeile wird die Verbindung getrennt, trotz noch zu sendenden Text.
                         await webSocket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Connection closed by Client.", _token);
-                        Console.WriteLine($"Connection closed by Client. Reson: {result.CloseStatusDescription}");
+                        _log.DebugFormat("Connection closed by Client. Reson: {0}", request.CloseStatusDescription);
                     }
                     else if (webSocket.State == WebSocketState.Aborted)
                     {
                         webSocket.Abort();
+                        _log.WarnFormat("WebSocket state = aborted. Websocket: {0} . Request: {1}", webSocket, request);
                     }
                 }
-                else if (result.MessageType == WebSocketMessageType.Text)
+                else if (request.MessageType == WebSocketMessageType.Text)
                 {
-                    string msg = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    Console.WriteLine($"Server Empfangen: {msg}");
+                    string msg = Encoding.UTF8.GetString(buffer, 0, request.Count);
+                    _log.DebugFormat("Server received: {0}", msg);
                     JsonRpcStateAsync async = new JsonRpcStateAsync(RpcResultHandler, webSocket);
                     async.JsonRpc = msg;
                     JsonRpcProcessor.Process(Handler.DefaultSessionId(), async);
                 }
                 else
                 {
-                    await webSocket.SendAsync(bufferSegment, WebSocketMessageType.Binary, result.EndOfMessage, _token);
+                    await webSocket.SendAsync(bufferSegment, WebSocketMessageType.Binary, request.EndOfMessage, _token);
+                    _log.DebugFormat("Keep alive message received: {0}", request);
                 }
             }
             webSocket.Dispose();
-            Console.WriteLine("Connection closed");
+            _log.InfoFormat("Connection closed with {0}:{1}", listenerContext.Request.RemoteEndPoint.Address, listenerContext.Request.RemoteEndPoint.Port);
         }
 
         private static async void RpcResultHandler(IAsyncResult result)
@@ -147,9 +156,9 @@ namespace TB_RpcService
             WebSocket client = (WebSocket)result.AsyncState;
             if (client.State == WebSocketState.Open)
             {
-                Console.WriteLine($"Gesendet: {((JsonRpcStateAsync)result).Result}");
                 byte[] msg = Encoding.UTF8.GetBytes(((JsonRpcStateAsync)result).Result);
                 await client.SendAsync(new ArraySegment<byte>(msg), WebSocketMessageType.Text, true, _token);
+                _log.DebugFormat("Send anser to client: {0}", ((JsonRpcStateAsync)result).Result);
             }
         }
     }
