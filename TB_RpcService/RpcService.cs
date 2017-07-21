@@ -19,7 +19,7 @@ namespace TB_RpcService
         [JsonRpcMethod]
         private bool shutDownPc(string token)
         {
-            var psi = new ProcessStartInfo("shutdown", "/s /t 30");
+            ProcessStartInfo psi = new ProcessStartInfo("shutdown", "/s /t 30");
             psi.CreateNoWindow = true;
             psi.UseShellExecute = false;
             Process.Start(psi);
