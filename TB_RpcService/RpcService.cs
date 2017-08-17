@@ -27,11 +27,21 @@ namespace TB_RpcService
         }
 
         [JsonRpcMethod]
+        private bool reBootPc(string token)
+        {
+            ProcessStartInfo psi = new ProcessStartInfo("shutdown", "/r /t 30");
+            psi.CreateNoWindow = true;
+            psi.UseShellExecute = false;
+            Process.Start(psi);
+            return true;
+        }
+
+        [JsonRpcMethod]
         private string updateComputer(string token)
         {
             WUApiHelper helper = new WUApiHelper();
             helper.StartWU();
-            return "Update gestartet";
+            return "Windows Update gestartet";
         }
     }
 }

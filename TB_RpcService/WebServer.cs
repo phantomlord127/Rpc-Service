@@ -22,9 +22,20 @@ namespace TB_RpcService
         private static CancellationTokenSource _ctSource = new CancellationTokenSource();
         private static CancellationToken _token = _ctSource.Token;
         private static ILog _log;
+        private static WebSocket _webSocket;
         static object[] services = new object[] {
            new ExampleCalculatorService()
         };
+        public static WebSocket Client {
+            get {if (_webSocket != null && _webSocket.State == WebSocketState.Open)
+                    return _webSocket;
+                return null;
+            }
+            private set {
+                if ((_webSocket == null || _webSocket.State != WebSocketState.Open) && value != null && value.State == WebSocketState.Open)
+                    _webSocket = value;
+            }
+        }
 
         public void Start()
         {
@@ -156,7 +167,12 @@ namespace TB_RpcService
             WebSocket client = (WebSocket)result.AsyncState;
             if (client.State == WebSocketState.Open)
             {
-                byte[] msg = Encoding.UTF8.GetBytes(((JsonRpcStateAsync)result).Result);
+                string msgText = ((JsonRpcStateAsync)result).Result;
+                if (string.Compare(msgText, "Windows Update gestartet") == 0)
+                {
+                    Client = client;
+                }
+                byte[] msg = Encoding.UTF8.GetBytes(msgText);
                 await client.SendAsync(new ArraySegment<byte>(msg), WebSocketMessageType.Text, true, _token);
                 _log.DebugFormat("Send anser to client: {0}", ((JsonRpcStateAsync)result).Result);
             }
