@@ -18,7 +18,6 @@ namespace TB_RpcService
     public class WebServer
     {
         private static HttpListener _listener;
-        private static byte[] _buffer = new byte[4096];
         private static CancellationTokenSource _ctSource = new CancellationTokenSource();
         private static CancellationToken _token = _ctSource.Token;
         private static ILog _log;
@@ -101,6 +100,7 @@ namespace TB_RpcService
 
         public void Stop()
         {
+            _ctSource.Cancel();
             _log.Info("Listener is shutting down.");
             _listener.Stop();
             _listener.Close();
