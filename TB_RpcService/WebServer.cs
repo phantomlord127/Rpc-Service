@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -11,7 +12,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using AustinHarris.JsonRpc;
 using log4net;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 
 namespace TB_RpcService
 {
@@ -22,6 +25,8 @@ namespace TB_RpcService
         private static CancellationToken _token = _ctSource.Token;
         private static ILog _log;
         private static WebSocket _webSocket;
+        private string[] _uris;
+        private string _secret;
         static object[] services = new object[] {
            new ExampleCalculatorService()
         };
@@ -43,18 +48,72 @@ namespace TB_RpcService
             //Config Austin Harris Rpc
             Config.SetErrorHandler(OnJsonRpcException);
             Config.SetPreProcessHandler(new PreProcessHandler(PreProcess));
+            //ReadConfig
+            InitConfig();
             // Start up the HttpListener on the passes Uri.  
             _listener = new HttpListener();
-            _listener.Prefixes.Add("http://127.0.0.1:8080/httpSocket/");
+            foreach (string uri in _uris)
+            {
+                _listener.Prefixes.Add(uri);
+            }
             _listener.Start();
             _listener.BeginGetContext(ContextCallback, _listener);
             _log.InfoFormat("Listener is startet for the following Prefixes:{0}", string.Join(",", _listener.Prefixes));
         }
 
+        private void InitConfig()
+        {
+            if (!File.Exists("RpcService.config"))
+            {
+                _log.Fatal("RpcService.config not found.");
+                throw new ApplicationException("RpcService.config not found.");
+            }
+            string[] lines = File.ReadAllLines("RpcService.config");
+            foreach (string line in lines)
+            {
+                if (!line.StartsWith("#"))
+                {
+                    if (line.StartsWith("uris"))
+                    {
+                        try
+                        {
+                            string[] uris = line.Split(new char[] { '=' }, StringSplitOptions.RemoveEmptyEntries)[1].Replace(" ", string.Empty).Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                            foreach (string uri in uris)
+                            {
+                                if (! Uri.IsWellFormedUriString(uri, UriKind.Absolute))
+                                    throw new ApplicationException(string.Format("{0} is not a valid uri.", uri));
+                            }
+                            _uris = uris;
+                        }
+                        catch (Exception ex)
+                        {
+                            _log.Fatal("Cannot read uris", ex);
+                            throw new ApplicationException("Cannot read uris", ex);
+                        }
+                    } else if (line.StartsWith("secret"))
+                    {
+                        try
+                        {
+                            _secret = line.Replace(" ", string.Empty).Split(new char[] { '=' }, StringSplitOptions.RemoveEmptyEntries)[1];
+                        }
+                        catch (Exception ex)
+                        {
+                            _log.Fatal("Cannot read secret", ex);
+                            throw new ApplicationException("Cannot read secret", ex);
+                        }
+                    } else
+                    {
+                        _log.Fatal("Unknown entry in RpcService.config");
+                        throw new ApplicationException("Unknown entry in RpcService.config");
+                    }
+                }
+            }
+        }
+
         private JsonRpcException PreProcess(JsonRequest request, object context)
         {
             JObject j = request.Params as JObject;
-            if (j == null || ! j.First.HasValues || j.First.First.ToString() != "test")
+            if (j == null || ! j.First.HasValues || j.First.First.ToString() != _secret)
             {
                 _log.WarnFormat("The token of the request is invalid. Request: {0} . Context: {1}", request, context);
                 throw new JsonRpcException(-32602, "Invalid Token", null);
