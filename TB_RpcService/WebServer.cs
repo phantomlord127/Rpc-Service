@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -8,6 +9,7 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using AustinHarris.JsonRpc;
@@ -68,44 +70,22 @@ namespace TB_RpcService
                 _log.Fatal("RpcService.config not found.");
                 throw new ApplicationException("RpcService.config not found.");
             }
-            string[] lines = File.ReadAllLines("RpcService.config");
-            foreach (string line in lines)
+            foreach (Match m in Regex.Matches(File.ReadAllText("RpcService.config"), @"^([a-zA-Z_]\w*)\s*=\s*([^#]+?)$", RegexOptions.Multiline))
             {
-                if (!line.StartsWith("#"))
+                string keyName = m.Groups[1].Value;
+                MatchCollection values = Regex.Matches(m.Groups[2].Value, @"[^,\s][^\,\s]*[^,\s]*");
+                if (keyName == "uris")
                 {
-                    if (line.StartsWith("uris"))
-                    {
-                        try
-                        {
-                            string[] uris = line.Split(new char[] { '=' }, StringSplitOptions.RemoveEmptyEntries)[1].Replace(" ", string.Empty).Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
-                            foreach (string uri in uris)
-                            {
-                                if (! Uri.IsWellFormedUriString(uri, UriKind.Absolute))
-                                    throw new ApplicationException(string.Format("{0} is not a valid uri.", uri));
-                            }
-                            _uris = uris;
-                        }
-                        catch (Exception ex)
-                        {
-                            _log.Fatal("Cannot read uris", ex);
-                            throw new ApplicationException("Cannot read uris", ex);
-                        }
-                    } else if (line.StartsWith("secret"))
-                    {
-                        try
-                        {
-                            _secret = line.Replace(" ", string.Empty).Split(new char[] { '=' }, StringSplitOptions.RemoveEmptyEntries)[1];
-                        }
-                        catch (Exception ex)
-                        {
-                            _log.Fatal("Cannot read secret", ex);
-                            throw new ApplicationException("Cannot read secret", ex);
-                        }
-                    } else
-                    {
-                        _log.Fatal("Unknown entry in RpcService.config");
-                        throw new ApplicationException("Unknown entry in RpcService.config");
-                    }
+                    _uris = values.OfType<Match>().Select(match => match.Value).ToArray();
+                }
+                else if ( keyName == "secret")
+                {
+                    _secret = values[0].Value;
+                }
+                else
+                {
+                    _log.Fatal("RpcService.config is not valid.");
+                    throw new ApplicationException("RpcService.config is not valid.");
                 }
             }
         }
